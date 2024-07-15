@@ -55,7 +55,7 @@ export class LambdaApi extends Construct {
                 const lambdaName = `${removeSlashes(lambdaApiRoute.path)}-${methodHandler.method}-${props.disambiguator}`
                 const func = new NodeLambda(this, `LambdaApiHandler-${props.disambiguator}`, {
                     disambiguator: props.disambiguator,
-                    handler: methodHandler.method,
+                    handler: "index." + methodHandler.method,
                     name: `handler-${lambdaName}`,
                     entry: methodHandler.entry,
                 })

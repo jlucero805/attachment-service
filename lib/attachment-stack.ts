@@ -12,14 +12,16 @@ export class AttachmentStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: AttachmentStackProps) {
     super(scope, id, props);
 
+    const getLambda = (name: string) => join(__dirname, "..", "dist", name)
+
     const lambdaApi = new LambdaApi(this, `AttachmentLambdaApi-${props?.disambiguator}`, {
         disambiguator: props?.disambiguator,
         name: "AttachmentApi",
         lambdaApiRoutes: [
             {
-                path: "/ping",
+                path: "/test",
                 methodHandlers: [
-                    { method: HttpMethod.GET, entry: join(__dirname, "..", "dist", "ping") },
+                    { method: HttpMethod.GET, entry: getLambda("test") },
                 ],
             }
         ]
