@@ -3,6 +3,8 @@ import { CorsHttpMethod, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Construct } from "constructs";
 import { NodeLambda } from "../constructs/NodeLambda";
+import { Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
+import { S3 } from "aws-cdk-lib/aws-ses-actions";
 
 const removeSlashes = (route: string) => {
     let accumulator = "";
@@ -21,7 +23,7 @@ export interface LambdaApiRoute {
 }
 
 export interface LambdaMethodHandler {
-    method: HttpMethod
+    methods: HttpMethod[]
     entry: string
 }
 
@@ -29,12 +31,19 @@ export interface LambdaApiProps {
     disambiguator: string
     name: string
     lambdaApiRoutes: LambdaApiRoute[]
+    globalEnvironmentVariables?: Record<string, string>
 }
 
 export class LambdaApi extends Construct {
     readonly httpApi: HttpApi;
+    readonly lambdaRole: Role;
+
     constructor (scope: Construct, id: string, props: LambdaApiProps) {
         super(scope, id)
+
+        this.lambdaRole = new Role(this, `LambdaApiRole-${props.disambiguator}`, {
+            assumedBy: new ServicePrincipal("lambda.amazonaws.com")
+        })
 
         this.httpApi = new HttpApi(this, `LambdaApi-${props.disambiguator}`, {
             apiName: `${props.name}-${props.disambiguator}`,
@@ -50,23 +59,29 @@ export class LambdaApi extends Construct {
             }
         });
 
+        const globalEnvironmentVariables = props.globalEnvironmentVariables ?? {};
+
         for (const lambdaApiRoute of props.lambdaApiRoutes) {
             for (const methodHandler of lambdaApiRoute.methodHandlers) {
-                const lambdaName = `${removeSlashes(lambdaApiRoute.path)}-${methodHandler.method}-${props.disambiguator}`
-                const func = new NodeLambda(this, `LambdaApiHandler-${props.disambiguator}`, {
-                    disambiguator: props.disambiguator,
-                    handler: "index." + methodHandler.method,
-                    name: `handler-${lambdaName}`,
-                    entry: methodHandler.entry,
-                })
+                for (const method of methodHandler.methods) {
+                    const lambdaName = `${removeSlashes(lambdaApiRoute.path)}-${method}-${props.disambiguator}`
+                    const func = new NodeLambda(this, `LambdaApiHandler-${props.disambiguator}`, {
+                        disambiguator: props.disambiguator,
+                        handler: "index." + method,
+                        name: `handler-${lambdaName}`,
+                        entry: methodHandler.entry,
+                        environmentVariables: globalEnvironmentVariables,
+                        role: this.lambdaRole,
+                    })
 
-                const lambdaIntegration = new HttpLambdaIntegration(`integration-${lambdaName}`, func.func)
+                    const lambdaIntegration = new HttpLambdaIntegration(`integration-${lambdaName}`, func.func)
 
-                this.httpApi.addRoutes({
-                    path: lambdaApiRoute.path,
-                    methods: [ methodHandler.method ],
-                    integration: lambdaIntegration,
-                })
+                    this.httpApi.addRoutes({
+                        path: lambdaApiRoute.path,
+                        methods: [ method ],
+                        integration: lambdaIntegration,
+                    })
+                }
             }
         }
 
